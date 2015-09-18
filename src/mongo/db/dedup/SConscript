@@ -1,0 +1,32 @@
+# -*- mode: python -*-
+
+Import("env")
+
+myenv = env.Clone()
+
+#myenv.Append(CCFLAGS='-std=c++0x')
+myenv.Append(CCFLAGS='-Wno-reorder')
+myenv.Append(CCFLAGS='-Wno-sign-compare')
+
+
+chunkFiles = [  "chunking/basic_chunking.cpp",
+                "chunking/rabin64_polynomials.cpp",
+                "chunking/rabin_chunking.cpp",
+                "chunking/sha1.cpp",
+                "chunking/rabin64_hash.cpp",
+                "chunking/rabin64_table.cpp"]
+
+indexFiles = [  "indexing/chunk_index.cpp",
+                "indexing/cuckoo_hash.cpp",
+                "indexing/dedup_alg.cpp",
+                "indexing/flash_file.cpp",
+                "indexing/page_data.cpp",
+                "dedup_setup.cpp"]
+
+myenv.Library(
+    "rabin_chunk",
+    chunkFiles)
+
+myenv.Library(
+    "chunk_index",
+    indexFiles)
