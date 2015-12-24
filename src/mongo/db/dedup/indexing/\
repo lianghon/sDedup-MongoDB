@@ -1,16 +1,11 @@
 #define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kReplication
 
-#include "mongo/db/dedup/chunking/sha1.h"
-#include "mongo/db/dedup/indexing/dedup_alg.h"
-#include "mongo/util/log.h"
 #include <algorithm>
-#include <iostream>
-using namespace std;
-#include <boost/thread/thread.hpp> 
-#include <cstdlib>
-#include <vector>
-#include <string>
+#include "mongo/db/dedup/indexing/dedup_alg.h"
+#include "mongo/db/dedup/chunking/sha1.h"
 //#include "mongo/db/dedup/chunking/rabin64_hash.h"
+#include "mongo/util/log.h"
+#include <boost/thread/thread.hpp> 
 
 using namespace mongo;
 

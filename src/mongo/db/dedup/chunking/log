@@ -1,0 +1,1896 @@
+diff --git a/src/mongo/db/dedup/SConscript b/src/mongo/db/dedup/SConscript
+index 22e54d7..51b59dd 100644
+--- a/src/mongo/db/dedup/SConscript
++++ b/src/mongo/db/dedup/SConscript
+@@ -8,13 +8,18 @@ myenv = env.Clone()
+ myenv.Append(CCFLAGS='-Wno-reorder')
+ myenv.Append(CCFLAGS='-Wno-sign-compare')
+ 
++#chunkFiles = [  "chunking/basic_chunking.cpp",
++                #"chunking/rabin64_polynomials.cpp",
++                #"chunking/rabin_chunking.cpp",
++                #"chunking/sha1.cpp",
++                #"chunking/rabin64_hash.cpp",
++                #"chunking/rabin64_table.cpp"]
++
++chunkFiles = [
++    "chunking/sha1.cpp",
++    #"chunking/rabinpoly.c",
++    "chunking/rabin_chunking.cpp"] 
+ 
+-chunkFiles = [  "chunking/basic_chunking.cpp",
+-                "chunking/rabin64_polynomials.cpp",
+-                "chunking/rabin_chunking.cpp",
+-                "chunking/sha1.cpp",
+-                "chunking/rabin64_hash.cpp",
+-                "chunking/rabin64_table.cpp"]
+ 
+ indexFiles = [  "indexing/chunk_index.cpp",
+                 "indexing/cuckoo_hash.cpp",
+diff --git a/src/mongo/db/dedup/chunking/rabin_chunking.cpp b/src/mongo/db/dedup/chunking/rabin_chunking.cpp
+index be6f6bf..77bede5 100644
+--- a/src/mongo/db/dedup/chunking/rabin_chunking.cpp
++++ b/src/mongo/db/dedup/chunking/rabin_chunking.cpp
+@@ -1,5 +1,6 @@
+ #include "rabin_chunking.h"
+-//#include <iostream>
++#include <vector>
++//#include <dedup.h>
+ //#include <algorithm>
+ 
+ namespace mongo {
+@@ -23,7 +24,8 @@ namespace mongo {
+ 			std::vector<int64_t> &chunkOffset,
+ 			std::vector<int64_t> &chunkLength)
+ 		{
+-		}
++            //TODO: Add stuff here.
++        }
+ 
+ 	}
+ }
+diff --git a/src/mongo/db/dedup/chunking/rabin_chunking.h b/src/mongo/db/dedup/chunking/rabin_chunking.h
+index 696c359..5050253 100644
+--- a/src/mongo/db/dedup/chunking/rabin_chunking.h
++++ b/src/mongo/db/dedup/chunking/rabin_chunking.h
+@@ -1,6 +1,7 @@
+ // rabin_chunking.h
+ #pragma once
+ #include <stdint.h>
++#include <vector>
+ 
+ namespace mongo{
+ 	namespace dedup {
+diff --git a/src/mongo/db/dedup/indexing/chunk_index.cpp b/src/mongo/db/dedup/indexing/chunk_index.cpp
+index d934754..b5cf785 100644
+--- a/src/mongo/db/dedup/indexing/chunk_index.cpp
++++ b/src/mongo/db/dedup/indexing/chunk_index.cpp
+@@ -7,21 +7,21 @@
+ #include <boost/thread/thread.hpp>
+ 
+ namespace mongo {
+-	namespace dedup {
+-		
+-		ChunkIndex::ChunkIndex(std::string fName, uint64_t numDocs) :
+-			flashFile (fName, PAGE_SIZE, true),
++    namespace dedup {
++
++        ChunkIndex::ChunkIndex(std::string fName, uint64_t numDocs) :
++            flashFile (fName, PAGE_SIZE, true),
+             rebuildDone (false),
+-			readPage (PAGE_SIZE),
+-			writePage (PAGE_SIZE),
+-			ramBuffer (NUM_PAGE_ENTRIES),
+-			prefetchCache (LRUCount * NUM_PAGE_ENTRIES),
+-			sha1HT (numDocs, SHA1, flashFile, readPage, 
++            readPage (PAGE_SIZE),
++            writePage (PAGE_SIZE),
++            ramBuffer (NUM_PAGE_ENTRIES),
++            prefetchCache (LRUCount * NUM_PAGE_ENTRIES),
++            sha1HT (numDocs, SHA1, flashFile, readPage, 
+                     ramBuffer, prefetchCache, lruMap, lruList),
+-			featureHT (numDocs * NUM_FEATURES, FEATURE, flashFile, readPage, 
++            featureHT (numDocs * NUM_FEATURES, FEATURE, flashFile, readPage, 
+                     ramBuffer, prefetchCache, lruMap, lruList) {	
+             }
+-        
++
+ 
+         void ChunkIndex::rebuild()
+         {
+@@ -58,40 +58,40 @@ namespace mongo {
+             DEDUP_LOG() << "Rebuild done: read " << numPages << " pages. sha1Inserted: " << sha1Inserted << ", ftInserted: " << ftInserted << ". Time: " << millis << " milliseconds";
+             delete timer;
+         }
+-		
+-		void ChunkIndex::addToFlashAndNewContainer()
+-		{
+-			ramBuffer.clear();
+-			// write page data to flash
+-			writePage.setPageId(flashFile.getCurrentPageId());
+-			
+-			// insert page data into cookoo hash table
+-			// TODO: const reference to the object
+-			// hashTable.insertPage(writePage);
+-
+-			flashFile.fileWritePage(writePage.convertToBytes());
++
++        void ChunkIndex::addToFlashAndNewContainer()
++        {
++            ramBuffer.clear();
++            // write page data to flash
++            writePage.setPageId(flashFile.getCurrentPageId());
++
++            // insert page data into cookoo hash table
++            // TODO: const reference to the object
++            // hashTable.insertPage(writePage);
++
++            flashFile.fileWritePage(writePage.convertToBytes());
+ 
+             // pageId is reset to 0 here.
+-			writePage.resetPageMetaData();
+-			// when flash space is used up, start over from the beginning
+-			// use flash as a log
+-			if (flashFile.getCurrentPageId() == maxFlashSizeInPages) {
+-				flashFile.setCurrentPageId(0);
+-			}
+-		}
+-	
+-        
+-		void ChunkIndex::set(ChunkHash cHash, DiskLoc &dLoc, int numFeatures) 
++            writePage.resetPageMetaData();
++            // when flash space is used up, start over from the beginning
++            // use flash as a log
++            if (flashFile.getCurrentPageId() == maxFlashSizeInPages) {
++                flashFile.setCurrentPageId(0);
++            }
++        }
++
++
++        void ChunkIndex::set(ChunkHash cHash, DiskLoc &dLoc, int numFeatures) 
+         {
+-			if (writePage.isPageFull()) {
+-				addToFlashAndNewContainer();				
+-			}
++            if (writePage.isPageFull()) {
++                addToFlashAndNewContainer();				
++            }
+ 
+             // use pageId from flashFile instead of writePage.
+-			int pageId = flashFile.getCurrentPageId();
+-			// add to page data
+-			int loc = writePage.addToPage(cHash, dLoc);
+-			
++            int pageId = flashFile.getCurrentPageId();
++            // add to page data
++            int loc = writePage.addToPage(cHash, dLoc);
++
+             //PageLoc pLoc(pageId, loc);
+             //hashTable.insertSha1(cHash.sha1, pLoc);
+             sha1HT.insert(cHash.sha1, pageId, loc);
+@@ -106,84 +106,84 @@ namespace mongo {
+ 
+             DEDUP_DEBUG() << "LX: set: pageId: " << pageId << ", loc: " << loc
+                 << ". ns: " << std::string(dLoc.ns) << ", oid: " << dLoc.oid.toString();
+-		}
+-		
++        }
++
+         void ChunkIndex::remove(const ChunkHash &cHash, int numFeatures)
+         {
+             sha1HT.remove(cHash.sha1, cHash);
+             for (int i = 0; i < numFeatures; ++i)
+                 featureHT.remove(cHash.features[i], cHash);
+         }
+-		
+-
+-		int ChunkIndex::index(
+-			const ChunkHash & cHash,
+-			int numFeatures,
+-			DiskLoc &dLoc,
+-			MetaData &simDoc,
+-            bool setIndex,
+-            const objMap &cache)
+-		{
+-			int ret;	
++
++
++        int ChunkIndex::index(
++                const ChunkHash & cHash,
++                int numFeatures,
++                DiskLoc &dLoc,
++                MetaData &simDoc,
++                bool setIndex,
++                const objMap &cache)
++        {
++            int ret;	
+             std::string sha1Key = byte2String(cHash.sha1, SHA1_LENGTH); 
+             //DEDUP_LOG() << "index: Sha1: " << sha1Key;
+ 
+             /*
+-            for (int k = 0; k < numFeatures; ++k) {
+-                std::string ftStr = byte2String(cHash.features[k], FEATURE_LENGTH);
+-                DEDUP_DEBUG() << "index: Feature " << k << " :" << ftStr;
+-            }
++               for (int k = 0; k < numFeatures; ++k) {
++               std::string ftStr = byte2String(cHash.features[k], FEATURE_LENGTH);
++               DEDUP_DEBUG() << "index: Feature " << k << " :" << ftStr;
++               }
+ 
+-			MetaData srcPE = getBySha1(cHash);
+-            */
++               MetaData srcPE = getBySha1(cHash);
++               */
+             std::vector<MetaData> srcMd = sha1HT.find(cHash.sha1, false);
+-			if ( srcMd.size() > 0 ) {	
++            if ( srcMd.size() > 0 ) {	
+                 simDoc = srcMd[0];
+                 std::string matchSha1 = byte2String(simDoc.ch.sha1, SHA1_LENGTH);
+                 //DEDUP_LOG() << "Whole duplicate, match Sha1: " << sha1Key;
+-				ret = 0;	// whole blob duplicate
+-			} else {
+-				// look for similar blobs
+-				unsigned int i;
+-				std::vector<MetaData> simDocs, candidates;
+-				for (i = 0; i < (unsigned int)numFeatures; ++i) {
++                ret = 0;	// whole blob duplicate
++            } else {
++                // look for similar blobs
++                unsigned int i;
++                std::vector<MetaData> simDocs, candidates;
++                for (i = 0; i < (unsigned int)numFeatures; ++i) {
+                     candidates = featureHT.find(cHash.features[i]);
+-					simDocs.insert(simDocs.end(), candidates.begin(), candidates.end());
+-				}
+-
+-				if (simDocs.size() > 0) {
+-					ret = 1;	// found similar blob(s)
+-					std::vector<MetaData> matches;
+-					std::vector<int> counts;
+-
+-					// get a map from doc to #matches in matches
+-					for (std::vector<MetaData>::iterator it = simDocs.begin();
+-						it != simDocs.end(); ++it) {
+-						for (i = 0; i < matches.size(); ++i) {
+-							if (matches[i] == *it) {
+-								counts[i]++;
+-								break;
+-							}
+-						}
+-						if (i == matches.size()) {
+-							matches.push_back(*it);
+-							counts.push_back(1);
+-						}
+-					}
+-
+-					// find the most similar blob (with max #occurences and appeared later)
++                    simDocs.insert(simDocs.end(), candidates.begin(), candidates.end());
++                }
++
++                if (simDocs.size() > 0) {
++                    ret = 1;	// found similar blob(s)
++                    std::vector<MetaData> matches;
++                    std::vector<int> counts;
++
++                    // get a map from doc to #matches in matches
++                    for (std::vector<MetaData>::iterator it = simDocs.begin();
++                            it != simDocs.end(); ++it) {
++                        for (i = 0; i < matches.size(); ++i) {
++                            if (matches[i] == *it) {
++                                counts[i]++;
++                                break;
++                            }
++                        }
++                        if (i == matches.size()) {
++                            matches.push_back(*it);
++                            counts.push_back(1);
++                        }
++                    }
++
++                    // find the most similar blob (with max #occurences and appeared later)
+                     int maxI = 0;
+                     int maxC = 0;
+-					for (i = 0; i < counts.size(); ++i) {
+-						if ( counts[i] > maxC ) {
+-							maxC = counts[i];
+-							maxI = i;
++                    for (i = 0; i < counts.size(); ++i) {
++                        if ( counts[i] > maxC ) {
++                            maxC = counts[i];
++                            maxI = i;
+                         }
+-					}
++                    }
+ 
+-					int maxCount = 0;
+-					int maxIndex = 0;
+-					for (i = 0; i < counts.size(); ++i) {
++                    int maxCount = 0;
++                    int maxIndex = 0;
++                    for (i = 0; i < counts.size(); ++i) {
+                         DEDUP_DEBUG() << "LX: index: match oid: " 
+                             << matches[i].dl.oid.toString()  
+                             << ". count: " << counts[i];
+@@ -194,12 +194,12 @@ namespace mongo {
+                             DEDUP_DEBUG() << "LX: index: match in cache: " << matches[i].dl.oid.toString(); 
+                         }
+ 
+-						if ( counts[i] > maxCount ) {
+-							maxCount = counts[i];
+-							maxIndex = i;
++                        if ( counts[i] > maxCount ) {
++                            maxCount = counts[i];
++                            maxIndex = i;
+                         }
+-					}
+-                    
++                    }
++
+                     DEDUP_DEBUG() << "LX: maxCount: " << maxCount << ". maxC: " << maxC;
+                     if (maxIndex != maxI) 
+                         DEDUP_DEBUG() << "LX: choose sub-optimal match with cache hit!";
+@@ -208,105 +208,105 @@ namespace mongo {
+                         << std::string(matches[maxIndex].dl.ns)
+                         //<< ", sha1: " << byte2String(matches[maxIndex].ch.sha1, SHA1_LENGTH);
+                         << ". OID: " << matches[maxIndex].dl.oid.toString();
+-					
++
+                     //simDoc = matches[maxI];
+                     simDoc = matches[maxIndex];
+-				} else {
+-					ret = 2;
+-				}
++                } else {
++                    ret = 2;
++                }
+ 
+                 /*
+                 // TEST - don't insert indexes for similar docs
+                 if (ret == 1) {
+-                    setIndex = false;
++                setIndex = false;
+                 }
+                 // add sha1 and features to dedup index
+                 if(setIndex) {
+-				    set(cHash, dLoc, numFeatures);
++                set(cHash, dLoc, numFeatures);
+                 }
+                 */
+-			}
++            }
+ 
+-			return ret;
+-		}
++            return ret;
++        }
+ 
+-		void ChunkIndex::printStats()
+-		{
+-		}
++        void ChunkIndex::printStats()
++        {
++        }
+ 
+         /*
+-		MetaData ChunkIndex::getBySha1(const ChunkHash &cHash)
+-		{
+-            MetaData md;
+-            std::string sha1Key = byte2String(cHash.sha1, SHA1_LENGTH); 
+-            DEDUP_DEBUG() << "LX: getBySha1: " << sha1Key;
+-            
+-            PageLoc pLoc = hashTable.findSha1(cHash.sha1);
+-            
+-            if ( !VALID_PID(pLoc.pageId) ) {
+-                // return empty diskLoc, if not found
+-                return md;
+-            } else {
+-                // try to find mapping from pageLoc to diskLoc
+-                // first try ram buffer
+-                fdMap::iterator it = ramBuffer.find( LOC(pLoc) );
+-                if (it != ramBuffer.end()) {
+-                    md = (*it).second;
+-                    DEDUP_DEBUG() << "LX: getBySha1: found in ram buffer";
+-                } 
+-                else {	
+-                    // try prefetch cache
+-                    it = prefetchCache.find( LOC(pLoc) );
+-                    if (it != prefetchCache.end()) {
+-                        md = (*it).second;
+-                        DEDUP_DEBUG() << "getBySha1: found in prefetch cache"; 
+-                    } 
+-                    else {
+-                        // read from flash and add to prefetch cache
+-                        DEDUP_DEBUG() << "getBySha1: read from flash and add to prefetch cache.";
+-                        addToPrefetchCache(pLoc.pageId);
+-                        md = prefetchCache[ LOC(pLoc) ];
+-                    }
+-                }
+-            }
+-			return md;
+-		}
+-
+-		std::list<MetaData> ChunkIndex::getByFeature(
+-			const ChunkHash &cHash, int featureID)
+-		{	
+-            std::string ftKey = byte2String(cHash.features[featureID], FEATURE_LENGTH); 
+-            DEDUP_DEBUG() << "getByFeature: " << ftKey;
+-			std::list<MetaData> mdList;
+-            
+-            boost::array<PageLoc, maxBuckets> plArray = 
+-                hashTable.findFeature(cHash.features[featureID]);
+-
+-			for (unsigned int i = 0; i < maxBuckets; ++i) {
+-                if (!VALID_PID(plArray[i].pageId)) 
+-                    break;
+-                
+-                fdMap::iterator it = ramBuffer.find( LOC(plArray[i]) );
+-                if (it != ramBuffer.end() ) {
+-                    DEDUP_DEBUG() << "getByFeature: found in rambuffer";
+-                    mdList.push_back((*it).second);
+-                } else {
+-                    it = prefetchCache.find( LOC(plArray[i]) );
+-                    if (it != prefetchCache.end()) {
+-                        DEDUP_DEBUG() << "getByFeature: found in prefetch cache.";
+-                        mdList.push_back((*it).second);
+-                    } else {
+-                        // read from flash and add to prefetch cache
+-                        DEDUP_DEBUG() << "getByFeature: read from flash and add to prefetch cache.";
+-                        addToPrefetchCache(plArray[i].pageId);
+-                        mdList.push_back(prefetchCache[ LOC(plArray[i]) ]);
+-                    }
+-                }
+-            }
+-			return mdList;
+-		}
+-*/
++           MetaData ChunkIndex::getBySha1(const ChunkHash &cHash)
++           {
++           MetaData md;
++           std::string sha1Key = byte2String(cHash.sha1, SHA1_LENGTH); 
++           DEDUP_DEBUG() << "LX: getBySha1: " << sha1Key;
++
++           PageLoc pLoc = hashTable.findSha1(cHash.sha1);
++
++           if ( !VALID_PID(pLoc.pageId) ) {
++        // return empty diskLoc, if not found
++        return md;
++        } else {
++        // try to find mapping from pageLoc to diskLoc
++        // first try ram buffer
++        fdMap::iterator it = ramBuffer.find( LOC(pLoc) );
++        if (it != ramBuffer.end()) {
++        md = (*it).second;
++        DEDUP_DEBUG() << "LX: getBySha1: found in ram buffer";
++        } 
++        else {	
++        // try prefetch cache
++        it = prefetchCache.find( LOC(pLoc) );
++        if (it != prefetchCache.end()) {
++        md = (*it).second;
++        DEDUP_DEBUG() << "getBySha1: found in prefetch cache"; 
++        } 
++        else {
++        // read from flash and add to prefetch cache
++        DEDUP_DEBUG() << "getBySha1: read from flash and add to prefetch cache.";
++        addToPrefetchCache(pLoc.pageId);
++        md = prefetchCache[ LOC(pLoc) ];
++        }
++        }
++        }
++        return md;
++        }
++
++        std::list<MetaData> ChunkIndex::getByFeature(
++        const ChunkHash &cHash, int featureID)
++        {	
++        std::string ftKey = byte2String(cHash.features[featureID], FEATURE_LENGTH); 
++        DEDUP_DEBUG() << "getByFeature: " << ftKey;
++        std::list<MetaData> mdList;
++
++        boost::array<PageLoc, maxBuckets> plArray = 
++        hashTable.findFeature(cHash.features[featureID]);
++
++        for (unsigned int i = 0; i < maxBuckets; ++i) {
++        if (!VALID_PID(plArray[i].pageId)) 
++        break;
++
++        fdMap::iterator it = ramBuffer.find( LOC(plArray[i]) );
++        if (it != ramBuffer.end() ) {
++        DEDUP_DEBUG() << "getByFeature: found in rambuffer";
++        mdList.push_back((*it).second);
++        } else {
++        it = prefetchCache.find( LOC(plArray[i]) );
++        if (it != prefetchCache.end()) {
++        DEDUP_DEBUG() << "getByFeature: found in prefetch cache.";
++        mdList.push_back((*it).second);
++        } else {
++        // read from flash and add to prefetch cache
++        DEDUP_DEBUG() << "getByFeature: read from flash and add to prefetch cache.";
++        addToPrefetchCache(plArray[i].pageId);
++        mdList.push_back(prefetchCache[ LOC(plArray[i]) ]);
++        }
++        }
++        }
++        return mdList;
++        }
++        */
+ 
+ 
+-	}
++    }
+ }
+diff --git a/src/mongo/db/dedup/indexing/dedup_alg.cpp b/src/mongo/db/dedup/indexing/dedup_alg.cpp
+index f1a61ba..62b2c63 100644
+--- a/src/mongo/db/dedup/indexing/dedup_alg.cpp
++++ b/src/mongo/db/dedup/indexing/dedup_alg.cpp
+@@ -3,30 +3,30 @@
+ #include <algorithm>
+ #include "mongo/db/dedup/indexing/dedup_alg.h"
+ #include "mongo/db/dedup/chunking/sha1.h"
+-#include "mongo/db/dedup/chunking/rabin64_hash.h"
++//#include "mongo/db/dedup/chunking/rabin64_hash.h"
+ #include "mongo/util/log.h"
+ #include <boost/thread/thread.hpp> 
+ 
+ using namespace mongo;
+ 
+ namespace mongo{
+-	namespace dedup{
+-
+-		DedupAlg::DedupAlg() :
+-			totalBytes (0),
+-			dupBytes (0),
+-			storedBytes (0),
+-			totalBlobs (0),
+-			dupBlobs (0),
+-			uniqueBlobs (0),
+-			uniqueBytes (0),
+-			totalChunks (0),
++    namespace dedup{
++
++        DedupAlg::DedupAlg() :
++            totalBytes (0),
++            dupBytes (0),
++            storedBytes (0),
++            totalBlobs (0),
++            dupBlobs (0),
++            uniqueBlobs (0),
++            uniqueBytes (0),
++            totalChunks (0),
+             elapsedMicros (0) {
+-		}
++            }
++
+ 
+-		
+-		void DedupAlg::printStats()
+-		{
++        void DedupAlg::printStats()
++        {
+             if(totalBlobs % 100 == 0) {
+                 DEDUP_LOG() << std::endl;
+                 DEDUP_LOG() << "Total blob count: " << totalBlobs << ". Size: " << (totalBytes >> 10) << "KB";
+@@ -36,10 +36,10 @@ namespace mongo{
+                 DEDUP_LOG() << "Dedup ratio: " << (double)storedBytes / totalBytes * 100 << "%";
+                 DEDUP_LOG() << "Throughput: " << totalBytes / elapsedMicros * 1000000 / 1024 / 1024 << " MB/s";
+             }
+-		}
++        }
+ 
+-		void PDedup::profile()
+-		{
++        void PDedup::profile()
++        {
+             if(totalBlobs % 100 == 0) {
+                 DEDUP_LOG() << "Total time: " << elapsedMicros / 1000000 << " seconds.";
+                 DEDUP_LOG() << "Chunk time: " << chunkMicros / 1000000 << " seconds.";
+@@ -53,48 +53,48 @@ namespace mongo{
+                 DEDUP_LOG() << "Delta index time: " << deltaIndexMicros / 1000000 << " seconds.";
+                 DEDUP_LOG() << "Delta match time: " << deltaMatchMicros / 1000000 << " seconds.";
+             }
+-		}
++        }
+ 
+-		void PDedup::profileSecondary()
+-		{
++        void PDedup::profileSecondary()
++        {
+             if(totalBlobs % 100 == 0) {
+                 DEDUP_LOG() << "Total blob count: " << totalBlobs << ". Size: " << (totalBytes >> 10) << "KB";
+                 DEDUP_LOG() << "Total time: " << elapsedMicros / 1000000 << " seconds.";
+                 DEDUP_LOG() << "Decompression throughput: " << totalBytes / elapsedMicros * 1000000 / 1024 / 1024 << " MB/s";
+             }
+-		}
++        }
+ 
+-		PDedup::PDedup(int64_t numDocs, int64_t avgChkSize, int64_t chunkBufSize, 
++        PDedup::PDedup(int64_t numDocs, int64_t avgChkSize, int64_t chunkBufSize, 
+                 std::string flashFileName, int cSize) :
+-			avgChunkSize (avgChkSize),
+-			rChunk (avgChkSize >> 4, avgChkSize << 4,
+-				avgChkSize, chunkBufSize),
+-			cIndex (flashFileName, numDocs), 
++            avgChunkSize (avgChkSize),
++            rChunk (avgChkSize >> 4, avgChkSize << 4,
++                    avgChkSize, chunkBufSize),
++            cIndex (flashFileName, numDocs), 
+             cacheSize (cSize),
+-			sampledChunks (0),
+-			diskAccesses (0),
+-			chunkMicros (0),
+-			indexMicros (0),
+-			sampleMicros (0),
+-			deltaMicros (0),
+-			deltaFetchMicros (0),
+-			deltaComputeMicros (0),
+-			deltaIndexMicros (0),
+-			deltaMatchMicros (0),
+-			cacheFetchMicros (0),
+-		    dbFetchMicros (0),
++            sampledChunks (0),
++            diskAccesses (0),
++            chunkMicros (0),
++            indexMicros (0),
++            sampleMicros (0),
++            deltaMicros (0),
++            deltaFetchMicros (0),
++            deltaComputeMicros (0),
++            deltaIndexMicros (0),
++            deltaMatchMicros (0),
++            cacheFetchMicros (0),
++            dbFetchMicros (0),
+             cacheLookups (0),
+             cacheHits (0),
+             numMilestones (0),
+             numIndexes (0) {
+-		}
++            }
+ 
+         PDedup::~PDedup()
+         {
+         }
+ 
+-		void PDedup::printStats()
+-		{
++        void PDedup::printStats()
++        {
+             if(totalBlobs % 100 == 0) {
+                 DEDUP_LOG() << "Total chunk count: " << totalChunks
+                     << ". Sampled chunk count: " << sampledChunks
+@@ -107,39 +107,39 @@ namespace mongo{
+                 DEDUP_LOG() << "Number of indexes: " << numIndexes;
+                 DEDUP_LOG() << "Number of milestones: " << numMilestones;
+             }
+-			DedupAlg::printStats();
+-			cIndex.printStats();
+-		}
+-
+-		std::string PDedup::algName()
+-		{
+-			return std::string("PDedup");
+-		}
+-
+-		void PDedup::fullRabinHash(const unsigned char *bytes, int offset, uint64_t &hash)
+-		{
+-			uint64_t origHash;
+-			// reset hash value
+-			hash = 0;
+-			for (int i = 0; i < WINDOW_SIZE; ++i) {
+-				origHash = hash;
+-				hash <<= 8;
+-				hash ^= bytes[offset + i];
+-				hash ^= g_TD[(origHash >> 56) & 0xff];
+-			}
+-		}
+-
+-		void PDedup::incRabinHash(const unsigned char *bytes, int offset, uint64_t &hash)
+-		{
+-			uint64_t origHash;
+-			if (offset < 1)
+-				return;
+-			hash ^= g_TU[bytes[offset - 1]];
+-			origHash = hash;
+-			hash <<= 8;
+-			hash ^= bytes[offset - 1 + WINDOW_SIZE];
+-			hash ^= g_TD[(origHash >> 56) & 0xff];
+-		}
++            DedupAlg::printStats();
++            cIndex.printStats();
++        }
++
++        std::string PDedup::algName()
++        {
++            return std::string("PDedup");
++        }
++
++        //void PDedup::fullRabinHash(const unsigned char *bytes, int offset, uint64_t &hash)
++        //{
++            //uint64_t origHash;
++            //// reset hash value
++            //hash = 0;
++            //for (int i = 0; i < WINDOW_SIZE; ++i) {
++                //origHash = hash;
++                //hash <<= 8;
++                //hash ^= bytes[offset + i];
++                //hash ^= g_TD[(origHash >> 56) & 0xff];
++            //}
++        //}
++
++        //void PDedup::incRabinHash(const unsigned char *bytes, int offset, uint64_t &hash)
++        //{
++            //uint64_t origHash;
++            //if (offset < 1)
++                //return;
++            //hash ^= g_TU[bytes[offset - 1]];
++            //origHash = hash;
++            //hash <<= 8;
++            //hash ^= bytes[offset - 1 + WINDOW_SIZE];
++            //hash ^= g_TD[(origHash >> 56) & 0xff];
++        //}
+ 
+         void PDedup::addToLRU(const std::string& objId)
+         {
+@@ -184,7 +184,7 @@ namespace mongo{
+                 conn.connect(hostAndPort);
+                 if (conn.isFailed())
+                     error() << "LX: connection to " << hostAndPort << " failed!";
+-                
++
+                 DEDUP_DEBUG() << "LX: getObjFromOid: query host: " << hostAndPort;
+                 int queryOptions = QueryOption_SlaveOk;
+                 std::auto_ptr<DBClientCursor> cursor
+@@ -214,34 +214,34 @@ namespace mongo{
+             }
+         }
+ 
+-		int PDedup::deltaCompress(
+-			const unsigned char *src, int srcLen, 
+-			const unsigned char *dst, int dstLen,
+-			std::vector<Segment> &matchSeg, 
+-			std::vector<unsigned char> &unqBytes)
+-		{
++        int PDedup::deltaCompress(
++                const unsigned char *src, int srcLen, 
++                const unsigned char *dst, int dstLen,
++                std::vector<Segment> &matchSeg, 
++                std::vector<unsigned char> &unqBytes)
++        {
+             DEDUP_DEBUG() << "LX: deltacompress: srcLen: " << srcLen << " dstLen: " << dstLen;
+-			int i = 0;
+-			int j;
+-			int matchLen = 0;
+-			uint64_t hash = 0;
+-			int uniqueSegBegin = 0;
+-			bool getFullHash = true;
++            int i = 0;
++            int j;
++            int matchLen = 0;
++            uint64_t hash = 0;
++            int uniqueSegBegin = 0;
++            bool getFullHash = true;
+ 
+             Timer *timer = new Timer();
+ 
+-			// build index for src, use custom allocator
++            // build index for src, use custom allocator
+             // should be faster than default allocator			
+             /*
+-			boost::unordered_map<uint64_t, int,
+-				boost::hash<uint64_t>,
+-				std::equal_to<uint64_t>,
+-				boost::fast_pool_allocator<std::pair<const uint64_t, int>>> sIndex;
+-			*/
+-			
+-			// Make sure these vectors are empty 
+-			matchSeg.clear();
+-			unqBytes.clear();
++               boost::unordered_map<uint64_t, int,
++               boost::hash<uint64_t>,
++               std::equal_to<uint64_t>,
++               boost::fast_pool_allocator<std::pair<const uint64_t, int>>> sIndex;
++               */
++
++            // Make sure these vectors are empty 
++            matchSeg.clear();
++            unqBytes.clear();
+ 
+             boost::unordered_map<uint64_t, int> sIndex;
+ 
+@@ -249,18 +249,18 @@ namespace mongo{
+                 while (i <= srcLen - WINDOW_SIZE)
+                 {
+                     if (getFullHash) {
+-                        fullRabinHash(src, i, hash);
++                        //fullRabinHash(src, i, hash);
+                         getFullHash = false;
+                     } else {
+-                        incRabinHash(src, i, hash);
++                        //incRabinHash(src, i, hash);
+                     }
+ 
+                     // sample src index
+                     // amortize the cost of map lookup and insertion
+                     // TODO: evaluate loss of dedup quality
+-                    
++
+                     if (i % DELTA_SAMPLE_INTVL == 0 && 
+-                        sIndex.find(hash) == sIndex.end()) {
++                            sIndex.find(hash) == sIndex.end()) {
+                         sIndex[hash] = i;
+                     }
+                     i++;
+@@ -268,122 +268,122 @@ namespace mongo{
+             } else {
+                 while (i <= srcLen - WINDOW_SIZE)
+                 {
+-                    fullRabinHash(src, i, hash);
++                    //fullRabinHash(src, i, hash);
+                     // sample src index
+                     // amortize the cost of map lookup and insertion
+                     // TODO: evaluate loss of dedup quality
+                     if (i % DELTA_SAMPLE_INTVL == 0 && 
+-                        sIndex.find(hash) == sIndex.end()) {
++                            sIndex.find(hash) == sIndex.end()) {
+                         sIndex[hash] = i;
+                     }
+                     i += DELTA_SAMPLE_INTVL;
+                 }
+             }
+-			deltaIndexMicros += timer->micros();
++            deltaIndexMicros += timer->micros();
+             timer->reset();
+-			/*
+-			DEDUP_LOG() << "Time to build src index: " << secs;
+-			DEDUP_LOG() << "map seconds: " << mapSecs;
+-			DEDUP_LOG() << "hash seconds: " << hashSecs;
+-			DEDUP_LOG() << "num of entries inserted: " << entries;
+-			*/
+-
+-			// build index for dst and check for match in src index
+-			i = 0; hash = 0; getFullHash = true;
+-
+-			while (i <= dstLen - WINDOW_SIZE)
+-			{
+-				if (getFullHash) {
+-					fullRabinHash(dst, i, hash);
+-					getFullHash = false;
+-				} else {
+-					incRabinHash(dst, i, hash);
+-				}
+-
+-				if (sIndex.find(hash) != sIndex.end()) {
+-					// end of previous unique segment
+-					if (i > uniqueSegBegin) {
+-						int segOff = unqBytes.size();
+-						int segLen = i - uniqueSegBegin;
+-						Segment uniqueSeg(UNQ_SEG, segOff, segLen);
+-						matchSeg.push_back(uniqueSeg);
+-
+-
+-						// Fill unqBytes with dst 
+-						for (int k = 0; k < segLen; ++k) {
+-							unqBytes.push_back(dst[uniqueSegBegin + k]);
+-						}
+-
+-						uniqueSegBegin = -1;
+-					}
+-
+-					// find a match in src, extend search for longest match
+-					int srcOff = sIndex[hash];
+-					j = WINDOW_SIZE;
+-					while ( srcOff + j < srcLen	&&
+-						    i + j < dstLen	&&
+-						    src[srcOff + j] == dst[i + j])
+-						j++;
+-
+-					i += j;
+-					matchLen += j;
+-					getFullHash = true;
+-					uniqueSegBegin = i;	// begin of a new unique segment
+-					Segment dupSeg(DUP_SEG, srcOff, j);
+-					matchSeg.push_back(dupSeg);
+-				} else { 
+-					i++; 
+-				}
+-				
+-			}
+-
+-			if (uniqueSegBegin != -1 && uniqueSegBegin < dstLen) {
+-				// push the last unique segment into vector
+-				int segOff = unqBytes.size();
+-				int segLen = dstLen - uniqueSegBegin;
+-				Segment uniqueSeg(UNQ_SEG, segOff, segLen);
+-				matchSeg.push_back(uniqueSeg);
+-
+-				// Fill unqBytes with dst 
+-				for (int k = 0; k < segLen; ++k) {
+-					unqBytes.push_back(dst[uniqueSegBegin + k]);
+-				}
+-
+-			}
+-
+-			deltaMatchMicros+= timer->micros();
++            /*
++               DEDUP_LOG() << "Time to build src index: " << secs;
++               DEDUP_LOG() << "map seconds: " << mapSecs;
++               DEDUP_LOG() << "hash seconds: " << hashSecs;
++               DEDUP_LOG() << "num of entries inserted: " << entries;
++               */
++
++            // build index for dst and check for match in src index
++            i = 0; hash = 0; getFullHash = true;
++
++            while (i <= dstLen - WINDOW_SIZE)
++            {
++                if (getFullHash) {
++                    //fullRabinHash(dst, i, hash);
++                    getFullHash = false;
++                } else {
++                    //incRabinHash(dst, i, hash);
++                }
++
++                if (sIndex.find(hash) != sIndex.end()) {
++                    // end of previous unique segment
++                    if (i > uniqueSegBegin) {
++                        int segOff = unqBytes.size();
++                        int segLen = i - uniqueSegBegin;
++                        Segment uniqueSeg(UNQ_SEG, segOff, segLen);
++                        matchSeg.push_back(uniqueSeg);
++
++
++                        // Fill unqBytes with dst 
++                        for (int k = 0; k < segLen; ++k) {
++                            unqBytes.push_back(dst[uniqueSegBegin + k]);
++                        }
++
++                        uniqueSegBegin = -1;
++                    }
++
++                    // find a match in src, extend search for longest match
++                    int srcOff = sIndex[hash];
++                    j = WINDOW_SIZE;
++                    while ( srcOff + j < srcLen	&&
++                            i + j < dstLen	&&
++                            src[srcOff + j] == dst[i + j])
++                        j++;
++
++                    i += j;
++                    matchLen += j;
++                    getFullHash = true;
++                    uniqueSegBegin = i;	// begin of a new unique segment
++                    Segment dupSeg(DUP_SEG, srcOff, j);
++                    matchSeg.push_back(dupSeg);
++                } else { 
++                    i++; 
++                }
++
++            }
++
++            if (uniqueSegBegin != -1 && uniqueSegBegin < dstLen) {
++                // push the last unique segment into vector
++                int segOff = unqBytes.size();
++                int segLen = dstLen - uniqueSegBegin;
++                Segment uniqueSeg(UNQ_SEG, segOff, segLen);
++                matchSeg.push_back(uniqueSeg);
++
++                // Fill unqBytes with dst 
++                for (int k = 0; k < segLen; ++k) {
++                    unqBytes.push_back(dst[uniqueSegBegin + k]);
++                }
++
++            }
++
++            deltaMatchMicros+= timer->micros();
+             delete timer;
+-			return matchLen;
+-		}
++            return matchLen;
++        }
+ 
+ 
+         // Should not call this function together with processBlob
+         // in a single mongod instance.
+-		void PDedup::deltaDeCompress(const BSONObj &srcObj, 
+-			BSONObj &dstObj,
+-			char *unqBytes,
+-			const std::vector<Segment> &matchSeg)
+-		{
++        void PDedup::deltaDeCompress(const BSONObj &srcObj, 
++                BSONObj &dstObj,
++                char *unqBytes,
++                const std::vector<Segment> &matchSeg)
++        {
+             BSONObjBuilder bbld;
+             bbld.append(srcObj["_id"]);
+             const char * src = srcObj.objdata() + 4 + srcObj["_id"].size();
+             DEDUP_DEBUG() << "LX: PDedup::deltaDeCompress start.";
+-			int pos = 0;
++            int pos = 0;
+             Timer *timer = new Timer();
+ 
+-			for (std::vector<Segment>::const_iterator it = matchSeg.begin();
+-				it != matchSeg.end(); ++it) {			
+-				if ((*it).type == DUP_SEG) {
+-					DEDUP_DEBUG() << "DUP: " << pos << "\t" << (*it).offset 
+-						<< "\t" << (*it).len;
+-					bbld.bb().appendBuf(src + (*it).offset, (*it).len);
+-				}
+-				else if ((*it).type == UNQ_SEG) {
+-					DEDUP_DEBUG() <<"UNQ: " << pos << "\t" << (*it).offset 
+-						<< "\t" << (*it).len;
+-					bbld.bb().appendBuf(unqBytes + (*it).offset, (*it).len);
+-				}
+-			}
++            for (std::vector<Segment>::const_iterator it = matchSeg.begin();
++                    it != matchSeg.end(); ++it) {			
++                if ((*it).type == DUP_SEG) {
++                    DEDUP_DEBUG() << "DUP: " << pos << "\t" << (*it).offset 
++                        << "\t" << (*it).len;
++                    bbld.bb().appendBuf(src + (*it).offset, (*it).len);
++                }
++                else if ((*it).type == UNQ_SEG) {
++                    DEDUP_DEBUG() <<"UNQ: " << pos << "\t" << (*it).offset 
++                        << "\t" << (*it).len;
++                    bbld.bb().appendBuf(unqBytes + (*it).offset, (*it).len);
++                }
++            }
+             dstObj = bbld.obj();
+             totalBlobs++;
+             totalBytes += dstObj.objsize();
+@@ -396,103 +396,103 @@ namespace mongo{
+             addToLRU(dstObjId);
+ 
+             delete timer;
+-		}
+-
+-		int PDedup::processBlob(
+-            const BSONObj &obj,
+-			DiskLoc &dLoc, 
+-            DiskLoc &sLoc,
+-			std::vector<Segment> &matchSeg,
+-			std::vector<unsigned char> &uniqueData,
+-            bool setIndex)
+-		{
++        }
++
++        int PDedup::processBlob(
++                const BSONObj &obj,
++                DiskLoc &dLoc, 
++                DiskLoc &sLoc,
++                std::vector<Segment> &matchSeg,
++                std::vector<unsigned char> &uniqueData,
++                bool setIndex)
++        {
+             boost::mutex::scoped_lock lk(_m);
+ 
+             /*
+-            if(!cIndex.rebuildDone) {
+-                cIndex.rebuildDone = true;
+-                boost::thread rebuildThread(&ChunkIndex::rebuild, &cIndex);
+-                //cIndex.rebuild();
++               if(!cIndex.rebuildDone) {
++               cIndex.rebuildDone = true;
++               boost::thread rebuildThread(&ChunkIndex::rebuild, &cIndex);
++            //cIndex.rebuild();
+             }
+             */
+ 
+-			int i;
++            int i;
+             BSONElement oidE = obj["_id"];
+             int len = obj.objsize() - 5 - oidE.size();
+             const char * bytes = obj.objdata() + 4 + oidE.size();
+-			
++
+             std::vector<int64_t> chunkOffset, chunkLen;
+             Timer *timer = new Timer();
+ 
+             rChunk.rabinChunk((unsigned char *)bytes, len, chunkOffset, chunkLen);
+-			//assert(chunkOffset.size() == chunkLen.size());
++            //assert(chunkOffset.size() == chunkLen.size());
+ 
+             DEDUP_DEBUG() << "LX: done chunking."; 
+             chunkMicros += timer->micros();
+             timer->reset();
+ 
+-			// sha1 hash of the entire blob
+-			unsigned char sha1key[SHA1_LENGTH];
+-			sha1((unsigned char *)bytes, len, sha1key);
+-
+-			// sorted Murmur hashes for all chunks. The top NUM_FEATURES 
+-			// hashes are called features ( or 1 sketch) of a blob and added 
+-			// to index. #chunks may be less than NUM_FEATURES, 
+-			// in which case, the sketch only consists of #chunks features.
+-			std::vector<uint64_t> features;
+-			uint64_t feature;
+-			
+-			for (i = 0; i < chunkOffset.size(); ++i) {
+-				feature = MurmurHash64A(bytes + chunkOffset[i], chunkLen[i], 0);			
+-				features.push_back(feature);
++            // sha1 hash of the entire blob
++            unsigned char sha1key[SHA1_LENGTH];
++            sha1((unsigned char *)bytes, len, sha1key);
++
++            // sorted Murmur hashes for all chunks. The top NUM_FEATURES 
++            // hashes are called features ( or 1 sketch) of a blob and added 
++            // to index. #chunks may be less than NUM_FEATURES, 
++            // in which case, the sketch only consists of #chunks features.
++            std::vector<uint64_t> features;
++            uint64_t feature;
++
++            for (i = 0; i < chunkOffset.size(); ++i) {
++                feature = MurmurHash64A(bytes + chunkOffset[i], chunkLen[i], 0);			
++                features.push_back(feature);
+ 
+                 std::string ftStr = byte2String((unsigned char *)&feature, FEATURE_LENGTH);
+                 //DEDUP_DEBUG() << "Feature string: " << ftStr << " Chunk length: " << chunkLen[i];
+-			}
+-
+-			// sort features in a consistent way
+-			std::sort(features.begin(), features.end());
+-
+-			features.erase(std::unique(features.begin(), features.end()), features.end());
+-
+-			ChunkHash cHash;
+-			memcpy(cHash.sha1, sha1key, SHA1_LENGTH);
+-			int numFeatures = features.size() < NUM_FEATURES ?
+-				features.size() : NUM_FEATURES;
+-
+-			/*
+-			// random sampling of features
+-			for (int j = 0; j < numFeatures; ++j) {
+-				i = rand() % features.size();
+-				memcpy(cHash.features[j],
+-					(unsigned char *)(&features[i]), FEATURE_LENGTH);
+-			}
+-			*/
+-		
+-			for (i = 0; i < numFeatures; ++i) {
+-				memcpy(cHash.features[i], 
+-					(unsigned char *)(&features[i]), FEATURE_LENGTH);
+-			}
+-			
++            }
++
++            // sort features in a consistent way
++            std::sort(features.begin(), features.end());
++
++            features.erase(std::unique(features.begin(), features.end()), features.end());
++
++            ChunkHash cHash;
++            memcpy(cHash.sha1, sha1key, SHA1_LENGTH);
++            int numFeatures = features.size() < NUM_FEATURES ?
++                features.size() : NUM_FEATURES;
++
++            /*
++            // random sampling of features
++            for (int j = 0; j < numFeatures; ++j) {
++            i = rand() % features.size();
++            memcpy(cHash.features[j],
++            (unsigned char *)(&features[i]), FEATURE_LENGTH);
++            }
++            */
++
++            for (i = 0; i < numFeatures; ++i) {
++                memcpy(cHash.features[i], 
++                        (unsigned char *)(&features[i]), FEATURE_LENGTH);
++            }
++
+             sampleMicros += timer->micros();
+             timer->reset();
+ 
+-			// add sha1 hash and sketch to index
++            // add sha1 hash and sketch to index
+             MetaData md;
+-			int indexCode = cIndex.index(cHash, numFeatures, dLoc, md, setIndex, objCache);
++            int indexCode = cIndex.index(cHash, numFeatures, dLoc, md, setIndex, objCache);
+             sLoc = md.dl;
+             DEDUP_DEBUG() << "LX: processBlob: Index code: " << indexCode << ". OID: " << oidE.toString();
+             DEDUP_DEBUG() << "LX: processBlob: src loc ns: " << sLoc.ns;
+-            
++
+             indexMicros += timer->micros();
+             timer->reset();
+ 
+-			// interpret index results
+-			if (indexCode == 0) {
+-				dupBlobs++;
+-				dupBytes += len;
+-			}
+-			else if (indexCode == 1) {
++            // interpret index results
++            if (indexCode == 0) {
++                dupBlobs++;
++                dupBytes += len;
++            }
++            else if (indexCode == 1) {
+                 //DEDUP_DEBUG() << "LX: processBlob: src oid: " << sLoc.oid.toString() 
+                 //    << ". dst oid: " << dLoc.oid.toString();
+ 
+@@ -508,7 +508,7 @@ namespace mongo{
+                     indexCode = 2;
+                     goto unique;
+                 }
+-                    
++
+                 BSONElement srcOidE = srcObj["_id"];    
+                 int srcLen = srcObj.objsize() - 5 - srcOidE.size();
+                 const char * src = srcObj.objdata() + 4 + srcOidE.size();
+@@ -519,9 +519,9 @@ namespace mongo{
+                 // only store unique bytes after delta compression
+                 // match segments are populated but not used for now				
+                 int numUnqBytes = len - deltaCompress(
+-                    (unsigned char *)src, srcLen, (unsigned char *)bytes, len, matchSeg, uniqueData);
++                        (unsigned char *)src, srcLen, (unsigned char *)bytes, len, matchSeg, uniqueData);
+                 storedBytes += numUnqBytes + matchSeg.size() * sizeof(Segment);
+-                
++
+                 int deltaLen = numUnqBytes + matchSeg.size() * sizeof(Segment);
+                 std::string dstObjId = oidE.OID().toString();
+                 std::string srcObjId = srcOidE.OID().toString();
+@@ -543,12 +543,12 @@ namespace mongo{
+ 
+                 // TODO: replace cache entries
+                 /*
+-                std::string dstObjId = oidE.OID().toString();
+-                std::string srcObjId = srcOidE.OID().toString();
+-                objCache.erase(srcObjId);
+-                objCache[dstObjId] = obj.getOwned();
+-                addToLRU(dstObjId);
+-                */
++                   std::string dstObjId = oidE.OID().toString();
++                   std::string srcObjId = srcOidE.OID().toString();
++                   objCache.erase(srcObjId);
++                   objCache[dstObjId] = obj.getOwned();
++                   addToLRU(dstObjId);
++                   */
+ 
+                 //DEDUP_DEBUG() << "LX: Insert obj: " << dstObjId << ". Erase obj: " << srcObjId;  
+                 //DEDUP_LOG() << "dst_sha1: " << dstObj["sha1"].String() 
+@@ -558,12 +558,12 @@ namespace mongo{
+                 diskAccesses++;
+                 deltaComputeMicros += timer->micros();
+                 timer->reset();
+-			} 
+-			else if (indexCode == 2) {
++            } 
++            else if (indexCode == 2) {
+ unique:
+-				uniqueBlobs++;
+-				uniqueBytes += len;
+-				storedBytes += len;
++                uniqueBlobs++;
++                uniqueBytes += len;
++                storedBytes += len;
+ 
+                 cIndex.set(cHash, dLoc, numFeatures);
+                 numMilestones++;
+@@ -574,19 +574,19 @@ unique:
+                 objCache[dstObjId] = obj.getOwned();
+                 addToLRU(dstObjId);
+                 DEDUP_DEBUG() << "LX: Insert obj: " << dstObjId;  
+-			}
++            }
+             DEDUP_DEBUG() << "IndexCode: " << indexCode;
+ 
+-			totalBlobs++;
+-			totalBytes += len;
+-			totalChunks += features.size();
+-			sampledChunks += numFeatures;
++            totalBlobs++;
++            totalBytes += len;
++            totalChunks += features.size();
++            sampledChunks += numFeatures;
+             deltaMicros = deltaFetchMicros + deltaComputeMicros; 
+-			elapsedMicros = chunkMicros + sampleMicros + indexMicros + deltaMicros;
++            elapsedMicros = chunkMicros + sampleMicros + indexMicros + deltaMicros;
+ 
+             delete timer;
+             return indexCode;
+-		}
++        }
+ 
+         void PDedup::getSrcObj( 
+                 const std::string &ns, const OID &srcOID, BSONObj &srcObj,
+@@ -620,14 +620,14 @@ unique:
+             BSONObjBuilder bbld;
+             bbld.append(eoid);
+             BufBuilder &bb = bbld.bb();
+-            
++
+             DiskLoc dstLoc(ns, eoid.OID()), srcLoc;
+             std::vector<mongo::dedup::Segment> matchSeg;
+             std::vector<unsigned char> unqData;
+             bool setIndex = true;
+ 
+             int ret = processBlob(obj, dstLoc, srcLoc, matchSeg, unqData, setIndex);
+-            
++
+             std::string srcNs(srcLoc.ns);
+             // binData length
+             int binLen = 0;
+@@ -637,7 +637,7 @@ unique:
+                 // whole blob duplicate
+                 // Dedup type, source doc OID, source namespace
+                 binLen = 1 + 12 + (srcNs.size() + 1);
+-                
++
+                 // bindata element
+                 bb.appendNum((char) BinData);
+                 bb.appendStr("dedup_data");
+@@ -678,7 +678,7 @@ unique:
+                 if(unqData.size() > 0) {
+                     bb.appendBuf(&unqData[0], unqData.size());
+                 }
+-                
++
+                 newobj = bbld.obj();                
+ 
+             } else if (ret == 2) {
+@@ -696,68 +696,68 @@ unique:
+ 
+ 
+         /*
+-        void PDedup::restoreBSON(const BSONObj &obj, BSONObj &newobj, 
+-            const std::string &syncTarget, const std::string &self)
+-        {
+-            BSONElement dd = obj["dedup_data"];
+-            // Not deduplicated, no need to reconstruct.
+-            if(dd.eoo()) {
+-                DEDUP_DEBUG() << "restoreBSON: unique doc.";
+-                newobj = obj;
+-                return;
+-            }
+-            
+-            int binLen;
+-            char *bindata = const_cast<char *> (dd.binData(binLen));
+-            mongo::dedup::DupType dupType = (mongo::dedup::DupType) *bindata;
+-
+-            massert(20003, "DupType error.", 
+-                    dupType == mongo::dedup::WHOLE_DUP || 
+-                    dupType == mongo::dedup::PARTIAL_DUP);
+-
+-            if (dupType == mongo::dedup::WHOLE_DUP) {
+-                mongo::OID srcOID = *(reinterpret_cast<mongo::OID *> (bindata + 1));
+-                std::string ns(bindata + 1 + 12);
+-                DEDUP_LOG() << "restoreBSON: whole duplicate. binLen: " << binLen
+-                    << " src oid: " << srcOID.toString() << " ns: " << ns;
+-                
+-                getSrcObj(ns, srcOID, newobj, self, syncTarget);
+-            } 
+-            
+-            else if (dupType == mongo::dedup::PARTIAL_DUP)  {
+-                DEDUP_LOG() << "LX: restoreBSON: partial duplicate";
+-                int binOffset = 1;
+-                int dstLen = 0;
+-                mongo::OID srcOID = *(reinterpret_cast<mongo::OID *> (bindata + binOffset));
+-                binOffset += sizeof(mongo::OID);
+-                std::string ns(bindata + binOffset);
+-                binOffset += ns.size() + 1;
+-                int numMatchSegs = *(reinterpret_cast<int *> (bindata + binOffset));
+-                binOffset += sizeof(int);
+-
+-                DEDUP_LOG() << "LX: produce: ns: " << ns << ". numMatchSegs: " << numMatchSegs << ". srcOID: " << srcOID.toString();
+-
+-                std::vector<mongo::dedup::Segment> matchSeg;
+-                for(int k = 0; k < numMatchSegs; ++k) {
+-                    matchSeg.push_back( *(reinterpret_cast<mongo::dedup::Segment *> 
+-                                (bindata + binOffset)) );
+-                    binOffset += sizeof(mongo::dedup::Segment);
+-                    dstLen += matchSeg.back().len;
+-                }
++           void PDedup::restoreBSON(const BSONObj &obj, BSONObj &newobj, 
++           const std::string &syncTarget, const std::string &self)
++           {
++           BSONElement dd = obj["dedup_data"];
++        // Not deduplicated, no need to reconstruct.
++        if(dd.eoo()) {
++        DEDUP_DEBUG() << "restoreBSON: unique doc.";
++        newobj = obj;
++        return;
++        }
+ 
+-                // dstLen already includes the length of unique data in matchSeg
+-                int unqDataLen = *(reinterpret_cast<int *> (bindata + binOffset));
+-                binOffset += sizeof(int);
+-                char *unqData = unqDataLen > 0 ? (bindata + binOffset) : NULL;
++        int binLen;
++        char *bindata = const_cast<char *> (dd.binData(binLen));
++        mongo::dedup::DupType dupType = (mongo::dedup::DupType) *bindata;
++
++        massert(20003, "DupType error.", 
++        dupType == mongo::dedup::WHOLE_DUP || 
++        dupType == mongo::dedup::PARTIAL_DUP);
++
++        if (dupType == mongo::dedup::WHOLE_DUP) {
++        mongo::OID srcOID = *(reinterpret_cast<mongo::OID *> (bindata + 1));
++        std::string ns(bindata + 1 + 12);
++        DEDUP_LOG() << "restoreBSON: whole duplicate. binLen: " << binLen
++        << " src oid: " << srcOID.toString() << " ns: " << ns;
++
++        getSrcObj(ns, srcOID, newobj, self, syncTarget);
++        } 
++
++        else if (dupType == mongo::dedup::PARTIAL_DUP)  {
++        DEDUP_LOG() << "LX: restoreBSON: partial duplicate";
++        int binOffset = 1;
++        int dstLen = 0;
++        mongo::OID srcOID = *(reinterpret_cast<mongo::OID *> (bindata + binOffset));
++        binOffset += sizeof(mongo::OID);
++        std::string ns(bindata + binOffset);
++        binOffset += ns.size() + 1;
++        int numMatchSegs = *(reinterpret_cast<int *> (bindata + binOffset));
++        binOffset += sizeof(int);
++
++        DEDUP_LOG() << "LX: produce: ns: " << ns << ". numMatchSegs: " << numMatchSegs << ". srcOID: " << srcOID.toString();
++
++        std::vector<mongo::dedup::Segment> matchSeg;
++        for(int k = 0; k < numMatchSegs; ++k) {
++        matchSeg.push_back( *(reinterpret_cast<mongo::dedup::Segment *> 
++        (bindata + binOffset)) );
++        binOffset += sizeof(mongo::dedup::Segment);
++        dstLen += matchSeg.back().len;
++        }
+ 
+-                BSONObj srcObj;
+-                getSrcObj(ns, srcOID, srcObj, self, syncTarget);
+-                boost::scoped_array<char> dst( new char [dstLen] );
+-                deltaDeCompress(srcObj.objdata(), dst.get(), unqData, matchSeg);
+-                newobj = BSONObj(dst.get()).copy();
+-            }
++        // dstLen already includes the length of unique data in matchSeg
++        int unqDataLen = *(reinterpret_cast<int *> (bindata + binOffset));
++        binOffset += sizeof(int);
++        char *unqData = unqDataLen > 0 ? (bindata + binOffset) : NULL;
+ 
+-            return;
++        BSONObj srcObj;
++        getSrcObj(ns, srcOID, srcObj, self, syncTarget);
++        boost::scoped_array<char> dst( new char [dstLen] );
++        deltaDeCompress(srcObj.objdata(), dst.get(), unqData, matchSeg);
++        newobj = BSONObj(dst.get()).copy();
++        }
++
++        return;
+         }
+         */
+ 
+@@ -765,17 +765,17 @@ unique:
+ 
+ 
+         VDedup::VDedup(int64_t datasetSize, int64_t avgChkSize, 
+-            int64_t chunkBufSize, std::string flashFileName) :
+-			dataSize (datasetSize),
+-			avgChunkSize (avgChkSize),
+-			rChunk (avgChkSize >> 4, avgChkSize << 4,
+-				avgChkSize, chunkBufSize),
+-			cIndex (flashFileName, datasetSize/avgChkSize),
++                int64_t chunkBufSize, std::string flashFileName) :
++            dataSize (datasetSize),
++            avgChunkSize (avgChkSize),
++            rChunk (avgChkSize >> 4, avgChkSize << 4,
++                    avgChkSize, chunkBufSize),
++            cIndex (flashFileName, datasetSize/avgChkSize),
+             chunkMicros(0.0),
+             sha1Micros(0.0),
+             indexMicros(0.0) {
+-        }
+-    
++            }
++
+         std::string VDedup::algName()    
+         {
+             return std::string("VDedup");
+@@ -789,21 +789,21 @@ unique:
+                 DEDUP_LOG() << "Sha1 time: " << sha1Micros / 1000000 << " seconds.";
+                 DEDUP_LOG() << "Index time: " << indexMicros / 1000000 << " seconds.";
+             }
+-            
++
+         }
+ 
+         int VDedup::processBlob(
+-            unsigned char *bytes,
+-            int len,
+-            DiskLoc &dLoc,
+-            DiskLoc &sLoc,
+-            bool setIndex) 
++                unsigned char *bytes,
++                int len,
++                DiskLoc &dLoc,
++                DiskLoc &sLoc,
++                bool setIndex) 
+         {
+             int i;
+             Timer *timer = new Timer();
+-			std::vector<int64_t> chunkOffset, chunkLen;
++            std::vector<int64_t> chunkOffset, chunkLen;
+ 
+-			rChunk.rabinChunk(bytes, len, chunkOffset, chunkLen);
++            rChunk.rabinChunk(bytes, len, chunkOffset, chunkLen);
+             chunkMicros += timer->micros();
+             timer->reset();
+ 
+@@ -825,15 +825,15 @@ unique:
+                     dupBlobs++;
+                     dupBytes += chunkLen[i];
+                 }
+-                
++
+                 else if (indexCode == 2) {
+                     uniqueBlobs++;
+                     uniqueBytes += chunkLen[i];
+                     storedBytes += chunkLen[i];
+                 }
+-                
++
+                 totalBlobs++;
+-			    totalBytes += chunkLen[i];
++                totalBytes += chunkLen[i];
+             }
+             elapsedMicros = chunkMicros + sha1Micros + indexMicros;
+             delete timer;            
+@@ -850,6 +850,6 @@ unique:
+         }
+ 
+ 
+-	}
++    }
+ }
+ 
+diff --git a/src/mongo/db/dedup/indexing/dedup_alg.h b/src/mongo/db/dedup/indexing/dedup_alg.h
+index 8b473c8..b2f8b29 100644
+--- a/src/mongo/db/dedup/indexing/dedup_alg.h
++++ b/src/mongo/db/dedup/indexing/dedup_alg.h
+@@ -9,14 +9,14 @@
+ #include "mongo/db/repl/oplogreader.h"
+ 
+ namespace mongo {
+-	namespace dedup {
++    namespace dedup {
+ 
+-		#define DELTA_SAMPLE_INTVL  32
++#define DELTA_SAMPLE_INTVL  32
+ 
+-		enum SegType {
+-			DUP_SEG = 0,
+-			UNQ_SEG = 1
+-		};
++        enum SegType {
++            DUP_SEG = 0,
++            UNQ_SEG = 1
++        };
+ 
+         enum DupType {
+             WHOLE_DUP = 0,
+@@ -24,170 +24,171 @@ namespace mongo {
+         };
+ 
+ #pragma pack(1)
+-		class Segment 
+-		{
+-		friend class PDedup;
+-        public:
+-			char type;
+-			int offset;
+-			int len;
+-
+-			Segment(char t, int off, int l) :
+-				type(t),
+-				offset(off),
+-				len(l) {
+-			}
+-		};
++        class Segment 
++        {
++            friend class PDedup;
++            public:
++            char type;
++            int offset;
++            int len;
++
++            Segment(char t, int off, int l) :
++                type(t),
++                offset(off),
++                len(l) {
++                }
++        };
+ #pragma pack()
+ 
+-		class DedupAlg {
+-		protected:
+-			/*
+-			uniqueBytes only refers to size of unique blobs. storedBytes = 
+-			uniqueBytes + (non-compressible bytes in delta compression).
+-			*/
+-			int64_t totalBytes;	// total bytes processed
+-			int64_t dupBytes;	// duplicate bytes
+-			int64_t uniqueBytes;	// bytes of unique blobs
+-			int64_t storedBytes;	// bytes actually stored
+-
+-			int64_t totalBlobs;
+-			int64_t dupBlobs;
+-			int64_t uniqueBlobs;
+-			int64_t totalChunks;
+-			double elapsedMicros;
+-			std::string name;
+-		public:
+-			DedupAlg();
+-            virtual ~DedupAlg() {}
+-			virtual std::string algName() = 0;
+-			//virtual void processBlob(unsigned char* bytes,
+-			//	int len, const DiskLoc &dLoc);
+-			
+-			virtual void printStats();
+-		};
++        class DedupAlg {
++            protected:
++                /*
++                   uniqueBytes only refers to size of unique blobs. storedBytes
++                   = uniqueBytes + (non-compressible bytes in delta
++                   compression).
++                   */
++                int64_t totalBytes;	// total bytes processed
++                int64_t dupBytes;	// duplicate bytes
++                int64_t uniqueBytes;	// bytes of unique blobs
++                int64_t storedBytes;	// bytes actually stored
++
++                int64_t totalBlobs;
++                int64_t dupBlobs;
++                int64_t uniqueBlobs;
++                int64_t totalChunks;
++                double elapsedMicros;
++                std::string name;
++            public:
++                DedupAlg();
++                virtual ~DedupAlg() {}
++                virtual std::string algName() = 0;
++                //virtual void processBlob(unsigned char* bytes,
++                //	int len, const DiskLoc &dLoc);
++
++                virtual void printStats();
++        };
+ 
+ 
+         class VDedup : public DedupAlg {
+-        private:
+-            int64_t dataSize;
+-            int64_t avgChunkSize;
+-            double chunkMicros;
+-            double sha1Micros;
+-            double indexMicros;
+-            RabinChunking rChunk;
+-            ChunkIndex cIndex;
+-        public:
+-            VDedup(int64_t dataSize, int64_t avgChunkSize, 
+-                int64_t chunkBufferSize, std::string flashFile);
+-            ~VDedup();
+-            std::string algName();
+-            void printStats();
+-            void profile();
+-
+-            int processBlob(
+-                unsigned char* bytes,
+-                int len,
+-                DiskLoc &dLoc,
+-                DiskLoc &sLoc,
+-                bool setIndex);
++            private:
++                int64_t dataSize;
++                int64_t avgChunkSize;
++                double chunkMicros;
++                double sha1Micros;
++                double indexMicros;
++                RabinChunking rChunk;
++                ChunkIndex cIndex;
++            public:
++                VDedup(int64_t dataSize, int64_t avgChunkSize, 
++                        int64_t chunkBufferSize, std::string flashFile);
++                ~VDedup();
++                std::string algName();
++                void printStats();
++                void profile();
++
++                int processBlob(
++                        unsigned char* bytes,
++                        int len,
++                        DiskLoc &dLoc,
++                        DiskLoc &sLoc,
++                        bool setIndex);
+         };
+ 
+-		class PDedup : public DedupAlg {
+-		private:
+-			int64_t dataSize;
+-			int64_t avgChunkSize;
+-			int64_t numChunks;
+-			RabinChunking rChunk;
+-			ChunkIndex cIndex;
+-            objMap objCache; // source object cache
+-            std::list<std::string> OIDLru;  // LRU list of object ID, records insertion order
+-            int cacheSize; // number of cache entries
+-            boost::mutex _m;
+-
+-            // profiling stats
+-			int64_t sampledChunks;
+-			double chunkMicros;
+-			double sampleMicros;
+-			double indexMicros;
+-			double deltaMicros;
+-			double deltaFetchMicros;
+-			double deltaComputeMicros;
+-			double deltaIndexMicros;
+-			double deltaMatchMicros;
+-            double cacheFetchMicros;
+-            double dbFetchMicros;
+-			int diskAccesses;
+-            int cacheLookups;
+-            int cacheHits;
+-            int numIndexes;
+-            int numMilestones;
+-		public:
+-			PDedup(int64_t numDocs, int64_t avgChkSize, 
+-                int64_t chunkBufSize, std::string fName, int cSize);
+-            ~PDedup();
+-
+-			std::string algName();
+-			
+-			void fullRabinHash(const unsigned char *bytes, int offset, uint64_t &hash);
+-			void incRabinHash(const unsigned char *bytes, int offset, uint64_t &hash);
+-
+-            int getObjFromOid(std::string hostAndPort, 
+-                const mongo::OID &srcOID, std::string ns, BSONObj &obj);
+-
+-            int processBlob(
+-                const BSONObj &obj,
+-                DiskLoc &dLoc, 
+-                DiskLoc &sLoc,
+-                std::vector<Segment> &matchSeg,
+-                std::vector<unsigned char> &uniqueData,
+-                bool setIndex);
+-            /*
+-			int processBlob(
+-				unsigned char* bytes,
+-				int len,
+-				DiskLoc &dLoc,
+-                DiskLoc &sLoc,
+-				std::vector<Segment> &matchSeg,
+-				std::vector<unsigned char> &uniqueData,
+-                bool setIndex);
+-            */
+-			
+-            void printStats();
+-			void profile();
+-            void profileSecondary();
+-
+-            void addToLRU(const std::string& objId);
+-			/*
+-			@return: length of matched bytes
+-			@param matchSeg: segments in dst that have matches in src
+-			*/
+-			int deltaCompress(
+-				const unsigned char *src, int srcLen,
+-				const unsigned char *dst, int dstLen,
+-				std::vector<Segment> &matchSeg,
+-				std::vector<unsigned char> &unqBytes);
+-
+-            /*
+-		    void deltaDeCompress(const char *src, 
+-                char *dst,
+-                char *unqBytes,
+-                const std::vector<Segment> &matchSeg);
+-            */
+-            void deltaDeCompress(const BSONObj &srcObj, 
+-                BSONObj &dstObj,
+-                char *unqBytes,
+-                const std::vector<Segment> &matchSeg);
+-
+-            void getSrcObj( 
+-                const std::string &ns, const OID &srcOID, BSONObj &srcObj,
+-                const std::string &self, const std::string &syncTarget);
+-
+-            int dedupBSON(const std::string &ns, const BSONObj &obj, BSONObj &newobj);
+-        
+-            void restoreBSON(const BSONObj &obj, BSONObj &newobj, 
+-                const std::string &syncTarget=std::string(),
+-                const std::string &self=std::string("localhost:27017") );
+-		};
+-	}
++        class PDedup : public DedupAlg {
++            private:
++                int64_t dataSize;
++                int64_t avgChunkSize;
++                int64_t numChunks;
++                RabinChunking rChunk;
++                ChunkIndex cIndex;
++                objMap objCache; // source object cache
++                std::list<std::string> OIDLru;  // LRU list of object ID, records insertion order
++                int cacheSize; // number of cache entries
++                boost::mutex _m;
++
++                // profiling stats
++                int64_t sampledChunks;
++                double chunkMicros;
++                double sampleMicros;
++                double indexMicros;
++                double deltaMicros;
++                double deltaFetchMicros;
++                double deltaComputeMicros;
++                double deltaIndexMicros;
++                double deltaMatchMicros;
++                double cacheFetchMicros;
++                double dbFetchMicros;
++                int diskAccesses;
++                int cacheLookups;
++                int cacheHits;
++                int numIndexes;
++                int numMilestones;
++            public:
++                PDedup(int64_t numDocs, int64_t avgChkSize, 
++                        int64_t chunkBufSize, std::string fName, int cSize);
++                ~PDedup();
++
++                std::string algName();
++
++                void fullRabinHash(const unsigned char *bytes, int offset, uint64_t &hash);
++                void incRabinHash(const unsigned char *bytes, int offset, uint64_t &hash);
++
++                int getObjFromOid(std::string hostAndPort, 
++                        const mongo::OID &srcOID, std::string ns, BSONObj &obj);
++
++                int processBlob(
++                        const BSONObj &obj,
++                        DiskLoc &dLoc, 
++                        DiskLoc &sLoc,
++                        std::vector<Segment> &matchSeg,
++                        std::vector<unsigned char> &uniqueData,
++                        bool setIndex);
++                /*
++                   int processBlob(
++                   unsigned char* bytes,
++                   int len,
++                   DiskLoc &dLoc,
++                   DiskLoc &sLoc,
++                   std::vector<Segment> &matchSeg,
++                   std::vector<unsigned char> &uniqueData,
++                   bool setIndex);
++                   */
++
++                void printStats();
++                void profile();
++                void profileSecondary();
++
++                void addToLRU(const std::string& objId);
++                /*
++                   @return: length of matched bytes
++                   @param matchSeg: segments in dst that have matches in src
++                   */
++                int deltaCompress(
++                        const unsigned char *src, int srcLen,
++                        const unsigned char *dst, int dstLen,
++                        std::vector<Segment> &matchSeg,
++                        std::vector<unsigned char> &unqBytes);
++
++                /*
++                   void deltaDeCompress(const char *src, 
++                   char *dst,
++                   char *unqBytes,
++                   const std::vector<Segment> &matchSeg);
++                   */
++                void deltaDeCompress(const BSONObj &srcObj, 
++                        BSONObj &dstObj,
++                        char *unqBytes,
++                        const std::vector<Segment> &matchSeg);
++
++                void getSrcObj( 
++                        const std::string &ns, const OID &srcOID, BSONObj &srcObj,
++                        const std::string &self, const std::string &syncTarget);
++
++                int dedupBSON(const std::string &ns, const BSONObj &obj, BSONObj &newobj);
++
++                void restoreBSON(const BSONObj &obj, BSONObj &newobj, 
++                        const std::string &syncTarget=std::string(),
++                        const std::string &self=std::string("localhost:27017") );
++        };
++    }
+ }

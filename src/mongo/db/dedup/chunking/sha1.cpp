@@ -33,7 +33,7 @@
 #include<iostream>
 
 #if defined(POLARSSL_SHA1_C)
-#include "win2nix.h"
+//#include "win2nix.h"
 #include "sha1.h"
 
 #if defined(POLARSSL_FS_IO) || defined(POLARSSL_SELF_TEST)

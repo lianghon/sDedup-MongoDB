@@ -1,6 +1,7 @@
 // rabin_chunking.h
 #pragma once
 #include <stdint.h>
+#include <vector>
 
 namespace mongo{
 	namespace dedup {

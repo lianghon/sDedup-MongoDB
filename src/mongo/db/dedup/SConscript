@@ -8,13 +8,19 @@ myenv = env.Clone()
 myenv.Append(CCFLAGS='-Wno-reorder')
 myenv.Append(CCFLAGS='-Wno-sign-compare')
 
+#chunkFiles = [  "chunking/basic_chunking.cpp",
+                #"chunking/rabin64_polynomials.cpp",
+                #"chunking/rabin_chunking.cpp",
+                #"chunking/sha1.cpp",
+                #"chunking/rabin64_hash.cpp",
+                #"chunking/rabin64_table.cpp"]
 
-chunkFiles = [  "chunking/basic_chunking.cpp",
-                "chunking/rabin64_polynomials.cpp",
-                "chunking/rabin_chunking.cpp",
-                "chunking/sha1.cpp",
-                "chunking/rabin64_hash.cpp",
-                "chunking/rabin64_table.cpp"]
+chunkFiles = [
+    "chunking/sha1.cpp",
+    "chunking/rabinpoly.cpp",
+    "chunking/msb.cpp",
+    "chunking/rabin_chunking.cpp"] 
+
 
 indexFiles = [  "indexing/chunk_index.cpp",
                 "indexing/cuckoo_hash.cpp",
