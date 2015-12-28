@@ -51,7 +51,7 @@ namespace mongo {
                     size_to_read = size;
             int new_segment = 0;
 
-            chunkOffset.push_back(segment_offset);
+            //chunkOffset.push_back(segment_offset);
 
             while ((cur_segment_len = rabin_segment_next(rp, buftoread, size,
                             &new_segment)) > 0) {
@@ -88,7 +88,9 @@ namespace mongo {
             }
 
             if (segment_len > 0) {
+                segment_offset += segment_len;
                 chunkLength.push_back(segment_len);
+                chunkOffset.push_back(segment_offset);
             }
 
             rabin_free(&rp);
