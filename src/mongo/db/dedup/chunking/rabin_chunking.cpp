@@ -1,11 +1,12 @@
 #define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kNetwork
 
-#include "rabin_chunking.h"
-#include <vector>
-#include <cstdlib>
-#include <string>
 #include "dedup.h"
 #include "mongo/util/log.h"
+#include "rabin_chunking.h"
+
+#include <cstdlib>
+#include <string>
+#include <vector>
 
 #define MIN_SEG_SIZE 2048
 #define MAX_SEG_SIZE 8192
@@ -13,7 +14,6 @@
 namespace mongo {
     using std::endl;
     namespace dedup {
-
         RabinChunking::RabinChunking(
                 int64_t minSize,
                 int64_t maxSize,
@@ -23,12 +23,6 @@ namespace mongo {
             maxChunkSize(maxSize),
             avgChunkSize(avgSize),
             bufferSize(bufSize) {
-                log() << "*~ Rabin initialization ~*" << endl;
-                log() << "Min size " << minSize << endl;
-                log() << "Max size " << maxSize << endl;
-                log() << "Avg size " << avgSize << endl;
-                log() << "Buf size " << bufSize << endl;
-                log() << "************ " << endl;
             }
 
         void RabinChunking::rabinChunk( unsigned char *bytes, int64_t size,
@@ -36,7 +30,6 @@ namespace mongo {
                 &chunkLength)
         {
             log() << "Rabin called with Size -  " << size << endl;
-            //int avg_seg_size = 4096;
             int rabin_window_size = 128;
             rabinpoly_t *rp = rabin_init(rabin_window_size, avgChunkSize,
                     minChunkSize, maxChunkSize);

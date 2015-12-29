@@ -18,6 +18,9 @@
 #ifndef _DEDUP_H_
 #define _DEDUP_H_ 
 
+#include <stdlib.h>
+#include <cstdlib>
+
 /**
  * Rabin fingerprinting algorithm structure declaration
  */
@@ -46,6 +49,10 @@ rabinpoly_t *rabin_init(unsigned int window_size,
 						unsigned int avg_segment_size, 
 						unsigned int min_segment_size,
 						unsigned int max_segment_size);
+
+/* Used for compression hashes */
+rabinpoly_t *rabin_hash_init();
+u_int64_t slide8(rabinpoly_t *rp, u_char m);
 
 /**
  * @brief Find the next segment boundary.

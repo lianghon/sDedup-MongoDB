@@ -44,10 +44,11 @@ static void polymult (u_int64_t *php, u_int64_t *plp, u_int64_t x, u_int64_t y);
 static u_int64_t polymmult (u_int64_t x, u_int64_t y, u_int64_t d);
 
 static void calcT(rabinpoly_t *rp);
-static u_int64_t slide8(rabinpoly_t *rp, u_char m);
 static u_int64_t append8(rabinpoly_t *rp, u_int64_t p, u_char m);
 
 static int dedupe_compute_cost = 0;
+static unsigned int avg_segment_size_global = 0;
+static unsigned int window_size_global = 0;
 
 static void log_dedupe_compute_cost()
 {
@@ -59,7 +60,6 @@ static void log_dedupe_compute_cost()
     fprintf(fp, "%d\n", dedupe_compute_cost);
     fclose(fp);
 }
-
 
 /**
  * functions to calculate the rabin hash
@@ -143,7 +143,7 @@ static void calcT(rabinpoly_t *rp)
  * Feed a new byte into the rabin sliding window and update 
  * the rabin fingerprint
  */
-static u_int64_t slide8(rabinpoly_t *rp, u_char m) 
+u_int64_t slide8(rabinpoly_t *rp, u_char m) 
 {
 	rp->bufpos++;
 
@@ -179,6 +179,9 @@ rabinpoly_t *rabin_init(unsigned int window_size,
 		return NULL;
 	}
 
+    window_size_global = window_size;
+    avg_segment_size_global = avg_segment_size;
+
 	rp = (rabinpoly_t *)malloc(sizeof(rabinpoly_t));
 	if (!rp) {
 		return NULL;
@@ -190,6 +193,45 @@ rabinpoly_t *rabin_init(unsigned int window_size,
 	rp->min_segment_size = min_segment_size;
 	rp->max_segment_size = max_segment_size;
 	rp->fingerprint_mask = (1 << (fls32(rp->avg_segment_size)-1))-1;
+
+	rp->fingerprint = 0;
+	rp->bufpos = -1;
+	rp->cur_seg_size = 0;
+
+	calcT(rp);
+
+	rp->buf = (u_char *)malloc(rp->window_size*sizeof(u_char));
+	if (!rp->buf){
+		return NULL;
+	}
+	bzero ((char*) rp->buf, rp->window_size*sizeof (u_char));
+	return rp;
+}
+
+/* Added for compression hashing */
+rabinpoly_t *rabin_hash_init()
+{
+    /* 'rabin_init' should be called before i.e. deduplication engine should
+     * have run at-least once. */
+    if ((window_size_global == 0) || (avg_segment_size_global == 0)) {
+        return NULL;
+    }
+
+	rabinpoly_t *rp;
+	rp = (rabinpoly_t *)malloc(sizeof(rabinpoly_t));
+	if (!rp) {
+		return NULL;
+	}
+
+	rp->poly = FINGERPRINT_PT;
+	rp->window_size = window_size_global;
+	rp->avg_segment_size = avg_segment_size_global;
+	rp->fingerprint_mask = (1 << (fls32(rp->avg_segment_size)-1))-1;
+
+    /* Both these parameters not really used in compression hash calculations
+     */
+	rp->min_segment_size = 0;
+	rp->max_segment_size = 0;
 
 	rp->fingerprint = 0;
 	rp->bufpos = -1;

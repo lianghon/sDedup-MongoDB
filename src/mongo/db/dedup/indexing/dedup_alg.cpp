@@ -10,7 +10,10 @@ using namespace std;
 #include <cstdlib>
 #include <vector>
 #include <string>
-//#include "mongo/db/dedup/chunking/rabin64_hash.h"
+
+#include "mongo/db/dedup/chunking/rabin_chunking.h"
+#include "mongo/db/dedup/chunking/dedup.h"
+#include "mongo/db/dedup/chunking/rabinpoly.h"
 
 using namespace mongo;
 
@@ -121,30 +124,20 @@ namespace mongo{
             return std::string("PDedup");
         }
 
-        //void PDedup::fullRabinHash(const unsigned char *bytes, int offset, uint64_t &hash)
-        //{
-            //uint64_t origHash;
-            //// reset hash value
-            //hash = 0;
-            //for (int i = 0; i < WINDOW_SIZE; ++i) {
-                //origHash = hash;
-                //hash <<= 8;
-                //hash ^= bytes[offset + i];
-                //hash ^= g_TD[(origHash >> 56) & 0xff];
-            //}
-        //}
+       rabinpoly_t *PDedup::fullRabinHash(const unsigned char *bytes, int offset, uint64_t &hash)
+       {
+           DEDUP_LOG() << "fillRabinHash called " << endl;
+           rabinpoly_t *rp = rabin_hash_init();
+           hash = rp->fingerprint;
+           return rp;
+        }
 
-        //void PDedup::incRabinHash(const unsigned char *bytes, int offset, uint64_t &hash)
-        //{
-            //uint64_t origHash;
-            //if (offset < 1)
-                //return;
-            //hash ^= g_TU[bytes[offset - 1]];
-            //origHash = hash;
-            //hash <<= 8;
-            //hash ^= bytes[offset - 1 + WINDOW_SIZE];
-            //hash ^= g_TD[(origHash >> 56) & 0xff];
-        //}
+        void PDedup::incRabinHash(const unsigned char *bytes, int offset, uint64_t &hash, rabinpoly_t *rp)
+        {
+            DEDUP_LOG() << "incRabinHash called " << endl;
+            slide8(rp, bytes[offset-1]);
+            hash = rp->fingerprint;
+        }
 
         void PDedup::addToLRU(const std::string& objId)
         {
@@ -229,7 +222,9 @@ namespace mongo{
             int i = 0;
             int j;
             int matchLen = 0;
+
             uint64_t hash = 0;
+
             int uniqueSegBegin = 0;
             bool getFullHash = true;
 
@@ -249,15 +244,19 @@ namespace mongo{
             unqBytes.clear();
 
             boost::unordered_map<uint64_t, int> sIndex;
+            rabinpoly_t *rp = NULL;
 
             if (DELTA_SAMPLE_INTVL <= WINDOW_SIZE) {
                 while (i <= srcLen - WINDOW_SIZE)
                 {
                     if (getFullHash) {
-                        //fullRabinHash(src, i, hash);
+                        rp = fullRabinHash(src, i, hash);
+                        if (rp == NULL) {
+                            return -1;
+                        }
                         getFullHash = false;
                     } else {
-                        //incRabinHash(src, i, hash);
+                        incRabinHash(src, i, hash, rp);
                     }
 
                     // sample src index
@@ -273,7 +272,8 @@ namespace mongo{
             } else {
                 while (i <= srcLen - WINDOW_SIZE)
                 {
-                    //fullRabinHash(src, i, hash);
+                    rp = fullRabinHash(src, i, hash);
+                    getFullHash = false;
                     // sample src index
                     // amortize the cost of map lookup and insertion
                     // TODO: evaluate loss of dedup quality
@@ -294,15 +294,18 @@ namespace mongo{
                */
 
             // build index for dst and check for match in src index
+            if (!getFullHash) {
+                rabin_free(&rp);
+            }
             i = 0; hash = 0; getFullHash = true;
 
             while (i <= dstLen - WINDOW_SIZE)
             {
                 if (getFullHash) {
-                    //fullRabinHash(dst, i, hash);
+                    rp = fullRabinHash(dst, i, hash);
                     getFullHash = false;
                 } else {
-                    //incRabinHash(dst, i, hash);
+                    incRabinHash(dst, i, hash, rp);
                 }
 
                 if (sIndex.find(hash) != sIndex.end()) {
@@ -312,7 +315,6 @@ namespace mongo{
                         int segLen = i - uniqueSegBegin;
                         Segment uniqueSeg(UNQ_SEG, segOff, segLen);
                         matchSeg.push_back(uniqueSeg);
-
 
                         // Fill unqBytes with dst 
                         for (int k = 0; k < segLen; ++k) {
@@ -339,7 +341,6 @@ namespace mongo{
                 } else { 
                     i++; 
                 }
-
             }
 
             if (uniqueSegBegin != -1 && uniqueSegBegin < dstLen) {
@@ -353,10 +354,12 @@ namespace mongo{
                 for (int k = 0; k < segLen; ++k) {
                     unqBytes.push_back(dst[uniqueSegBegin + k]);
                 }
-
             }
 
             deltaMatchMicros+= timer->micros();
+            if (!getFullHash) {
+                rabin_free(&rp);
+            }
             delete timer;
             return matchLen;
         }
