@@ -4,7 +4,6 @@
 
 #include "mongo/db/dedup/indexing/chunk_index.h"
 #include "mongo/db/dedup/chunking/rabin_chunking.h"
-#include "mongo/db/dedup/chunking/dedup.h"
 #include "mongo/util/timer.h"
 #include "mongo/db/repl/oplog.h"
 #include "mongo/db/repl/oplogreader.h"
@@ -131,8 +130,8 @@ namespace mongo {
 
                 std::string algName();
 
-               rabinpoly_t *fullRabinHash(const unsigned char *bytes, int offset, uint64_t &hash);
-                void incRabinHash(const unsigned char *bytes, int offset, uint64_t &hash, rabinpoly_t *rp);
+                void fullRabinHash(const unsigned char *bytes, int offset, uint64_t &hash);
+                void incRabinHash(const unsigned char *bytes, int offset, uint64_t &hash);
 
                 int getObjFromOid(std::string hostAndPort, 
                         const mongo::OID &srcOID, std::string ns, BSONObj &obj);

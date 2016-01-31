@@ -1,19 +1,31 @@
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kNetwork
+/**
+ * @file rabin_chunking.cpp
+ * @brief Contains functions used to call rabin fingerprinting on input data
+ * and divide them into chunks.
+ *
+ * @author Sudhir Vijay
+ * @version 1.0
+ * @date 2016-01-31
+ */
 
-#include "dedup.h"
-#include "mongo/util/log.h"
-#include "rabin_chunking.h"
+#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kNetwork
 
 #include <cstdlib>
 #include <string>
 #include <vector>
 
+#include "dedup.h"
+#include "mongo/util/log.h"
+#include "rabin_chunking.h"
+
 #define MIN_SEG_SIZE 2048
 #define MAX_SEG_SIZE 8192
+#define DEFAULT_RABIN_WINDOW_SIZE 128
 
 namespace mongo {
     using std::endl;
     namespace dedup {
+        /* RabinChunking constructor */
         RabinChunking::RabinChunking(
                 int64_t minSize,
                 int64_t maxSize,
@@ -25,17 +37,20 @@ namespace mongo {
             bufferSize(bufSize) {
             }
 
+        /**
+         * Function that initializes a new rabin polynomial, finds chunk
+         * boundaries and fills them in the chunkOffset and chunkLength vectors
+         * */
         void RabinChunking::rabinChunk( unsigned char *bytes, int64_t size,
                 std::vector<int64_t> &chunkOffset, std::vector<int64_t>
                 &chunkLength)
         {
-            log() << "Rabin called with Size -  " << size << endl;
-            int rabin_window_size = 128;
+            int rabin_window_size = DEFAULT_RABIN_WINDOW_SIZE;
+            /** Initializing rabin polynomial */
             rabinpoly_t *rp = rabin_init(rabin_window_size, avgChunkSize,
                     minChunkSize, maxChunkSize);
 
             if (rp == NULL) {
-                log() << "Rabin initialization failed" << endl;
                 return;
             }
 
@@ -44,21 +59,20 @@ namespace mongo {
                     size_to_read = size;
             int new_segment = 0;
 
-            //chunkOffset.push_back(segment_offset);
-
+            /**
+             * Run rabin segmentation over the input buffer. Fill chunkLength
+             * and chunkOffset vectors with found rabin boundary coordinates.
+             * */
             while ((cur_segment_len = rabin_segment_next(rp, buftoread, size,
                             &new_segment)) > 0) {
                 size_to_read -= cur_segment_len;
-                log() << "size_to_read:" << size_to_read << endl;
                 if (size_to_read < 0) {
-                    log() << "Breaking [size_to_read < 0]!" << endl;
                     break;
                 }
 
                 segment_len += cur_segment_len;
 
                 if (new_segment) {
-                    log() << "New segment found. Segment Length:"<< segment_len << endl;
                     segment_offset += segment_len;
                     chunkLength.push_back(segment_len);
                     chunkOffset.push_back(segment_offset);
@@ -67,7 +81,6 @@ namespace mongo {
                 }
 
                 if (size_to_read == 0) {
-                    log() << "Breaking [size_to_read == 0]!" << endl;
                     break;
                 }
 
@@ -75,7 +88,6 @@ namespace mongo {
             }
 
             if (cur_segment_len == -1) {
-                log() << "Invalid len!" << endl;
                 rabin_free(&rp);
                 return;
             }
@@ -87,7 +99,6 @@ namespace mongo {
             }
 
             rabin_free(&rp);
-            log() << "Returning from rabin" << endl;
         }
     }
 }
